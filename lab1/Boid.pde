@@ -38,6 +38,20 @@ class Boid
      if (target != null)
      {  
         // TODO: Implement seek here
+        float desired_heading = atan2(target.y - kinematic.getPosition().y, target.x - kinematic.getPosition().x);
+        float current_heading = kinematic.getHeading();
+        
+        float angle_difference = desired_heading - current_heading;
+        angle_difference = normalize_angle_left_right(angle_difference);
+        
+        if (angle_difference != 0) {
+          float rotational_direction = angle_difference > 0 ? rotational_acceleration : -rotational_acceleration;
+          kinematic.increaseSpeed(0, rotational_direction);
+        }
+        
+        if (abs(angle_difference) < 0.1) {
+          kinematic.increaseSpeed(acceleration, 0);
+        }
      }
      
      // place crumbs, do not change     
