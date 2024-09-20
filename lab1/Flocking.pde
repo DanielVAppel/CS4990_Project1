@@ -18,31 +18,67 @@ void unflock() {
 
 //draw boids
 void drawFlock(float dt) {
+  update_flocking(flock);
   for (Boid boid : flock) {
-    update_flocking(flock, dt);
     boid.update(dt, flock);
     boid.draw();
   }
 }
 
 //movement for boids
-void update_flocking(ArrayList<Boid> flock, float dt) {
+void update_flocking(ArrayList<Boid> flock) {
+  PVector billyPosition = billy.kinematic.getPosition();
   for (Boid boid : flock) {
     PVector alignment = alignment(boid, flock);
     PVector cohesion = cohesion(boid, flock);
     PVector separation = separation(boid, flock);
+    PVector seekBilly = seek(boid, billyPosition);
     
     PVector steering = PVector.add(alignment, cohesion);
     steering.add(separation);
+    steering.add(seekBilly);
     
-    if (steering.mag() > 0.5) { //limit steering force
-      steering.setMag(0.5);
-    }
+    steering.limit(0.5);
     
     float currentSpeed = boid.kinematic.getSpeed();
-    float newSpeed = currentSpeed + steering.mag();
-    boid.kinematic.increaseSpeed(newSpeed - currentSpeed, 0);
+    float desiredSpeed = boid.kinematic.max_speed;
+    float speedChange = desiredSpeed - currentSpeed;
+    
+    speedChange = constrain(speedChange, -0.1, 0.1);
+    
+    boid.kinematic.increaseSpeed(speedChange, 0);
+    
+    float targetHeading = atan2(steering.y, steering.x);
+    float currentHeading = boid.kinematic.getHeading();
+    float headingChange = targetHeading - currentHeading;
+    headingChange = normalize_angle_left_right(headingChange);
+
+    headingChange = constrain(headingChange, -boid.kinematic.max_rotational_speed, boid.kinematic.max_rotational_speed);
+    
+    boid.kinematic.increaseSpeed(0, headingChange);
+    
+    println("Current Speed: " + boid.kinematic.getSpeed());
+println("Desired Speed: " + desiredSpeed);
   }
+}
+
+PVector seek(Boid boid, PVector target) {
+  PVector desired = PVector.sub(target, boid.kinematic.getPosition());
+  float distance = desired.mag();
+  
+  if (distance > 0) {
+    desired.normalize();
+    desired.mult(boid.kinematic.max_speed);
+  
+    PVector currentVelocity = PVector.sub(desired, new PVector(cos(boid.kinematic.getHeading()), sin(boid.kinematic.getHeading())));
+    currentVelocity.mult(constrain(boid.kinematic.getSpeed(), 0, boid.kinematic.max_speed));
+  
+    PVector steer = PVector.sub(desired, currentVelocity);
+    steer.limit(0.1);
+    return steer;
+  }
+  
+  return new PVector(0, 0);
 }
 
 //separation
