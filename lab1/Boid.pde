@@ -102,10 +102,15 @@ class Boid
       
    }
    
-   void follow(ArrayList<PVector> waypoints)
-   {
-      // TODO: change to follow *all* waypoints
-      this.target = waypoints.get(0);
-      
+   void follow(ArrayList<PVector> waypoints) {
+     if (waypoints.size() > 0) {
+       target = waypoints.get(0);  // Set the first waypoint as the target
+       waypoints.remove(0);        // Remove the waypoint once reached
+     }
+     else
+     {
+       target = null;  // No more waypoints to follow
+       kinematic.increaseSpeed(-kinematic.getSpeed(), -kinematic.getRotationalVelocity());  // Stop movement
+     }
    }
 }
