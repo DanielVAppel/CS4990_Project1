@@ -144,7 +144,7 @@ void draw() {
 
   float dt = (millis() - lastt)/1000.0;
   lastt = millis();
-  billy.update(dt);
+  billy.update(dt, flocking_enabled ? flock : null);
   map.update(dt);
   if (show_nav_mesh)
      nm.update(dt);
