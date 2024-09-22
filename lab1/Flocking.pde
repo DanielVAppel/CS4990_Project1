@@ -25,7 +25,7 @@ void unflock() {
 void drawFlock(float dt) {
   update_flocking(flock);
   for (Boid boid : flock) {
-    boid.update(dt);
+    boid.update(dt, flock);
     //boid.update(dt, flock);
     boid.draw();
   }
@@ -41,7 +41,7 @@ void update_flocking(ArrayList<Boid> flock) {
     // Calculate alignment, cohesion, separation, and seeking Billy
     PVector alignment = alignment(boid, flock).mult(1.0); // Adjust the weight as needed
     PVector cohesion = cohesion(boid, flock).mult(1.0);   // Adjust the weight as needed
-    PVector separation = separation(boid, flock).mult(1.5); // Separation might need more weight
+    PVector separation = separation(boid, flock).mult(5.0); // Separation might need more weight
     //PVector seekBilly = seek(boid, billyPosition).mult(0.5); // Adjust seeking weight
     
     // Boids move in the direction Billy is facing without directly chasing him
@@ -53,7 +53,7 @@ void update_flocking(ArrayList<Boid> flock) {
     steering.add(moveDirection);
     
     // Limit the combined steering force
-    steering.limit(0.5);// Adjust this limit to balance the movement
+    steering.limit(1.5);// Adjust this limit to balance the movement
     
     // Prevent Boids from moving independently before Billy starts
     if (billySpeed > 0) {
@@ -109,7 +109,7 @@ PVector separation(Boid boid, ArrayList<Boid> flock) {
   for (Boid other : flock) {
     if (other != boid) {
       float distance = PVector.dist(boid.kinematic.getPosition(), other.kinematic.getPosition());
-      if (distance > 0 && distance < 20) {
+      if (distance > 0 && distance < 40) {
         PVector diff = PVector.sub(boid.kinematic.getPosition(), other.kinematic.getPosition());
         diff.div(distance);
         steer.add(diff);
@@ -121,7 +121,7 @@ PVector separation(Boid boid, ArrayList<Boid> flock) {
     steer.div(count);
     steer.normalize();
     steer.mult(boid.kinematic.max_speed);
-    steer.limit(1.5); //avoid erratic movement
+    steer.limit(3.0); //avoid erratic movement
   }
   return steer;
 }
