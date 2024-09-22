@@ -1,13 +1,16 @@
+// Initialize the flock array
 ArrayList<Boid> flock = new ArrayList<Boid>();
 
 /// called when "f" is pressed; should instantiate additional boids and start flocking
 void flock() {
-  for (int i = 0; i < 8; i++) {
-    float x = random(0, width);
-    float y = random(0, height);
-    PVector random_position = new PVector(x, y);
-    Boid new_boid = new Boid(random_position, BILLY_START_HEADING, BILLY_MAX_SPEED, BILLY_MAX_ROTATIONAL_SPEED, BILLY_MAX_ACCELERATION, BILLY_MAX_ROTATIONAL_ACCELERATION);
-    flock.add(new_boid);
+  if (flock.size() == 0) { // Only add Boids if the flock is empty
+    for (int i = 0; i < 8; i++) {
+      float x = random(0, width);
+      float y = random(0, height);
+      PVector random_position = new PVector(x, y);
+      Boid new_boid = new Boid(random_position, BILLY_START_HEADING, BILLY_MAX_SPEED, BILLY_MAX_ROTATIONAL_SPEED, BILLY_MAX_ACCELERATION, BILLY_MAX_ROTATIONAL_ACCELERATION);
+      flock.add(new_boid);
+    }
   }
 }
 
@@ -16,30 +19,36 @@ void unflock() {
   flock.clear();
 }
 
-//draw boids
+//draw and update each Boid in the flock
 void drawFlock(float dt) {
   update_flocking(flock);
   for (Boid boid : flock) {
-    boid.update(dt, flock);
+    boid.update(dt);
+    //boid.update(dt, flock);
     boid.draw();
   }
 }
 
-//movement for boids
+// Update the movement for each Boid in the flockement for boids
 void update_flocking(ArrayList<Boid> flock) {
-  PVector billyPosition = billy.kinematic.getPosition();
+  PVector billyPosition = billy.kinematic.getPosition();// Get Billy's position to seek toward
+  
   for (Boid boid : flock) {
-    PVector alignment = alignment(boid, flock);
-    PVector cohesion = cohesion(boid, flock);
-    PVector separation = separation(boid, flock);
-    PVector seekBilly = seek(boid, billyPosition);
+    // Calculate alignment, cohesion, separation, and seeking Billy
+    PVector alignment = alignment(boid, flock).mult(1.0); // Adjust the weight as needed
+    PVector cohesion = cohesion(boid, flock).mult(1.0);   // Adjust the weight as needed
+    PVector separation = separation(boid, flock).mult(1.5); // Separation might need more weight
+    PVector seekBilly = seek(boid, billyPosition).mult(0.5); // Adjust seeking weight
     
+    // Combine all steering forces
     PVector steering = PVector.add(alignment, cohesion);
     steering.add(separation);
     steering.add(seekBilly);
     
-    steering.limit(0.5);
+    // Limit the combined steering force
+    steering.limit(0.5);// Adjust this limit to balance the movement
     
+    // Adjust Boid's speed and heading based on the steering force
     float currentSpeed = boid.kinematic.getSpeed();
     float desiredSpeed = boid.kinematic.max_speed;
     float speedChange = desiredSpeed - currentSpeed;
@@ -58,7 +67,7 @@ void update_flocking(ArrayList<Boid> flock) {
     boid.kinematic.increaseSpeed(0, headingChange);
     
     println("Current Speed: " + boid.kinematic.getSpeed());
-println("Desired Speed: " + desiredSpeed);
+    println("Desired Speed: " + desiredSpeed);
   }
 }
 
