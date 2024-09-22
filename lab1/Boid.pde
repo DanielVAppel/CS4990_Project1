@@ -30,6 +30,8 @@ class Boid
    float rotational_acceleration;     // Rotational acceleration of the Boid
    KinematicMovement kinematic;       // Kinematic movement handler
    PVector target;                    // Current target of the Boid
+   float arrivalRadius = 300;       // Distance within which the Boid starts to slow down
+
    
     // Constructor for the Boid, initializing its kinematic movement and parameters
    Boid(PVector position, float heading, float max_speed, float max_rotational_speed, float acceleration, float rotational_acceleration)
@@ -62,7 +64,6 @@ class Boid
             // Scale rotational speed down as it gets closer to the target heading
             rotational_direction *= map(abs(angle_difference), 0, PI, 0.1, 1); // Adjust rotation speed dynamically
             kinematic.increaseSpeed(0, rotational_direction);
-            //kinematic.increaseSpeed(0, rotational_direction * dt); //TODO
         } else {
         kinematic.increaseSpeed(0, -kinematic.getRotationalVelocity() * 0.5); // Gradually reduce rotation
       }
@@ -75,7 +76,7 @@ class Boid
         kinematic.increaseSpeed(forwardAcceleration, 0);
       } else {
         // Stop movement when within arrival radius
-        kinematic.increaseSpeed(-kinematic.getSpeed() * dt, -kinematic.getRotationalVelocity() * dt);
+        kinematic.increaseSpeed(-kinematic.getSpeed(), -kinematic.getRotationalVelocity());
         target = null; // Clear target to stop the circling behavior
       }
     }
@@ -135,16 +136,25 @@ class Boid
    
    // Handle path-following with waypoints
    void follow(ArrayList<PVector> waypoints) {
-     if (waypoints.size() > 0) {
-// Set the first waypoint as the target
-        if (target == null || dist(kinematic.getPosition().x, kinematic.getPosition().y, target.x, target.y) < 10) { // 10 is the arrival radius
-          target = waypoints.get(0);
-          waypoints.remove(0);
+    // Only proceed if there are waypoints left to follow
+    if (waypoints.size() > 0) {
+        // Check if Billy has reached the current target waypoint
+        if (target == null || dist(kinematic.getPosition().x, kinematic.getPosition().y, target.x, target.y) < arrivalRadius) {
+            // Set the next waypoint as the target
+            target = waypoints.get(0); // Get the next waypoint
+            waypoints.remove(0);      // Remove the waypoint after setting it as the target
         }
-       }   else {
-      // No more waypoints, stop the Boid's movement
-      target = null;
-      kinematic.increaseSpeed(-kinematic.getSpeed(), -kinematic.getRotationalVelocity()); // Stop movement
+
+        // Continue moving towards the current target without stopping
+        float distanceToTarget = dist(kinematic.getPosition().x, kinematic.getPosition().y, target.x, target.y);
+        if (distanceToTarget > 10) {
+            // Maintain speed while moving towards the waypoint
+            kinematic.increaseSpeed(acceleration, 0);
+        }
+    } else {
+        // No more waypoints, stop completely
+        target = null;
+        kinematic.increaseSpeed(-kinematic.getSpeed(), -kinematic.getRotationalVelocity());
     }
-  }
+}
 }

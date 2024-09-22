@@ -1,20 +1,22 @@
 // Initialize the flock array
 ArrayList<Boid> flock = new ArrayList<Boid>();
 
-/// called when "f" is pressed; should instantiate additional boids and start flocking
+// called when "f" is pressed; should instantiate additional boids and start flocking
 void flock() {
   if (flock.size() == 0) { // Only add Boids if the flock is empty
     for (int i = 0; i < 8; i++) {
-      float x = random(0, width);
-      float y = random(0, height);
+// Spawn near Billy's position to ensure close formation
+      float x = billy.kinematic.getPosition().x + random(-60, 60); // Adjust spawn distance from Billy
+      float y = billy.kinematic.getPosition().y + random(-60, 60);
       PVector random_position = new PVector(x, y);
-      Boid new_boid = new Boid(random_position, BILLY_START_HEADING, BILLY_MAX_SPEED, BILLY_MAX_ROTATIONAL_SPEED, BILLY_MAX_ACCELERATION, BILLY_MAX_ROTATIONAL_ACCELERATION);
+      Boid new_boid = new Boid(random_position, billy.kinematic.getHeading(), BILLY_MAX_SPEED, BILLY_MAX_ROTATIONAL_SPEED, BILLY_MAX_ACCELERATION, BILLY_MAX_ROTATIONAL_ACCELERATION);
+      //Boid new_boid = new Boid(random_position, BILLY_START_HEADING, BILLY_MAX_SPEED, BILLY_MAX_ROTATIONAL_SPEED, BILLY_MAX_ACCELERATION, BILLY_MAX_ROTATIONAL_ACCELERATION);
       flock.add(new_boid);
     }
   }
 }
 
-/// called when "f" is pressed again; should remove the flock
+// called when "f" is pressed again; should remove the flock
 void unflock() {
   flock.clear();
 }
@@ -32,45 +34,54 @@ void drawFlock(float dt) {
 // Update the movement for each Boid in the flockement for boids
 void update_flocking(ArrayList<Boid> flock) {
   PVector billyPosition = billy.kinematic.getPosition();// Get Billy's position to seek toward
-  
+  float billyHeading = billy.kinematic.getHeading(); // Align flock heading with Billy
+  float billySpeed = billy.kinematic.getSpeed();
+
   for (Boid boid : flock) {
     // Calculate alignment, cohesion, separation, and seeking Billy
     PVector alignment = alignment(boid, flock).mult(1.0); // Adjust the weight as needed
     PVector cohesion = cohesion(boid, flock).mult(1.0);   // Adjust the weight as needed
     PVector separation = separation(boid, flock).mult(1.5); // Separation might need more weight
-    PVector seekBilly = seek(boid, billyPosition).mult(0.5); // Adjust seeking weight
+    //PVector seekBilly = seek(boid, billyPosition).mult(0.5); // Adjust seeking weight
     
+    // Boids move in the direction Billy is facing without directly chasing him
+     PVector moveDirection = new PVector(cos(billyHeading), sin(billyHeading)).mult(billySpeed);
+        
     // Combine all steering forces
     PVector steering = PVector.add(alignment, cohesion);
     steering.add(separation);
-    steering.add(seekBilly);
+    steering.add(moveDirection);
     
     // Limit the combined steering force
     steering.limit(0.5);// Adjust this limit to balance the movement
     
-    // Adjust Boid's speed and heading based on the steering force
-    float currentSpeed = boid.kinematic.getSpeed();
-    float desiredSpeed = boid.kinematic.max_speed;
-    float speedChange = desiredSpeed - currentSpeed;
+    // Prevent Boids from moving independently before Billy starts
+    if (billySpeed > 0) {
+        float currentSpeed = boid.kinematic.getSpeed();
+        float desiredSpeed = billySpeed ; // Sync speed with Billy
+        float speedChange = desiredSpeed - currentSpeed;
+        speedChange = constrain(speedChange, -0.1, 0.1);
+        boid.kinematic.increaseSpeed(speedChange, 0);
     
-    speedChange = constrain(speedChange, -0.1, 0.1);
+        float targetHeading = atan2(billyPosition.y - boid.kinematic.getPosition().y, billyPosition.x - boid.kinematic.getPosition().x);
+        float currentHeading = boid.kinematic.getHeading();
+        float headingChange = normalize_angle_left_right(targetHeading - currentHeading);
+            
+        if (abs(headingChange) > 0.1) { // Only rotate if necessary to prevent jitter
+                headingChange = constrain(headingChange, -boid.kinematic.max_rotational_speed * 0.7, boid.kinematic.max_rotational_speed * 0.7);
+                boid.kinematic.increaseSpeed(0, headingChange);
+            } else {
+                boid.kinematic.increaseSpeed(0, -boid.kinematic.getRotationalVelocity() * 0.5); // Reduce rotation gradually
+            }
+        } else {
+    float speedReduction = boid.kinematic.getSpeed() * 0.5;
+    boid.kinematic.increaseSpeed(-speedReduction, -boid.kinematic.getRotationalVelocity() * 0.5);
     
-    boid.kinematic.increaseSpeed(speedChange, 0);
-    
-    float targetHeading = atan2(steering.y, steering.x);
-    float currentHeading = boid.kinematic.getHeading();
-    float headingChange = targetHeading - currentHeading;
-    headingChange = normalize_angle_left_right(headingChange);
-
-    headingChange = constrain(headingChange, -boid.kinematic.max_rotational_speed, boid.kinematic.max_rotational_speed);
-    
-    boid.kinematic.increaseSpeed(0, headingChange);
-    
-    println("Current Speed: " + boid.kinematic.getSpeed());
-    println("Desired Speed: " + desiredSpeed);
+    //println("Current Speed: " + boid.kinematic.getSpeed());
+    //println("Desired Speed: " + desiredSpeed);
+    }
   }
 }
-
 PVector seek(Boid boid, PVector target) {
   PVector desired = PVector.sub(target, boid.kinematic.getPosition());
   float distance = desired.mag();
