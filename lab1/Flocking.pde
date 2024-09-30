@@ -33,16 +33,14 @@ void drawFlock(float dt) {
 
 // Update the movement for each Boid in the flockement for boids
 void update_flocking(ArrayList<Boid> flock) {
-  PVector billyPosition = billy.kinematic.getPosition();// Get Billy's position to seek toward
   float billyHeading = billy.kinematic.getHeading(); // Align flock heading with Billy
-  float billySpeed = billy.kinematic.getSpeed();
+  float billySpeed = billy.kinematic.getSpeed();// Billy's speed
 
   for (Boid boid : flock) {
     // Calculate alignment, cohesion, separation, and seeking Billy
     PVector alignment = alignment(boid, flock).mult(1.0); // Adjust the weight as needed
     PVector cohesion = cohesion(boid, flock).mult(1.0);   // Adjust the weight as needed
     PVector separation = separation(boid, flock).mult(5.0); // Separation might need more weight
-    //PVector seekBilly = seek(boid, billyPosition).mult(0.5); // Adjust seeking weight
     
     // Boids move in the direction Billy is facing without directly chasing him
      PVector moveDirection = new PVector(cos(billyHeading), sin(billyHeading)).mult(billySpeed);
@@ -54,31 +52,32 @@ void update_flocking(ArrayList<Boid> flock) {
     
     // Limit the combined steering force
     steering.limit(1.5);// Adjust this limit to balance the movement
-    
+    float currentSpeed = boid.kinematic.getSpeed();
+
     // Prevent Boids from moving independently before Billy starts
     if (billySpeed > 0) {
-        float currentSpeed = boid.kinematic.getSpeed();
         float desiredSpeed = billySpeed ; // Sync speed with Billy
-        float speedChange = desiredSpeed - currentSpeed;
-        speedChange = constrain(speedChange, -0.1, 0.1);
+        
+    // Gradually adjust speed with a delay factor
+        float speedChange = (desiredSpeed - currentSpeed) * .05;// 0.05 factor introduces delay
         boid.kinematic.increaseSpeed(speedChange, 0);
     
-        float targetHeading = atan2(billyPosition.y - boid.kinematic.getPosition().y, billyPosition.x - boid.kinematic.getPosition().x);
+    // Align Boid's heading gradually towards Billy's direction with a slight delay
+        float targetHeading = billyHeading;  // Align directly with Billy's heading
         float currentHeading = boid.kinematic.getHeading();
         float headingChange = normalize_angle_left_right(targetHeading - currentHeading);
             
         if (abs(headingChange) > 0.1) { // Only rotate if necessary to prevent jitter
-                headingChange = constrain(headingChange, -boid.kinematic.max_rotational_speed * 0.7, boid.kinematic.max_rotational_speed * 0.7);
+                headingChange = constrain(headingChange, -boid.kinematic.max_rotational_speed * 0.5, boid.kinematic.max_rotational_speed * 0.5);
                 boid.kinematic.increaseSpeed(0, headingChange);
             } else {
                 boid.kinematic.increaseSpeed(0, -boid.kinematic.getRotationalVelocity() * 0.5); // Reduce rotation gradually
             }
-        } else {
-    float speedReduction = boid.kinematic.getSpeed() * 0.5;
-    boid.kinematic.increaseSpeed(-speedReduction, -boid.kinematic.getRotationalVelocity() * 0.5);
     
-    //println("Current Speed: " + boid.kinematic.getSpeed());
-    //println("Desired Speed: " + desiredSpeed);
+    // Handle stopping when Billy stops
+    } else {
+            float stopSpeed = boid.kinematic.getSpeed();  // Gradually slow down
+            boid.kinematic.increaseSpeed(-stopSpeed, -boid.kinematic.getRotationalVelocity());
     }
   }
 }
