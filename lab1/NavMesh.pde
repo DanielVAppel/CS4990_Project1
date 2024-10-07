@@ -242,7 +242,13 @@ class NavMesh
    }
    
    void draw() {
+     ArrayList<Wall> boundaryWalls = new ArrayList<>(map.outline);
       ArrayList<String> drawnLines = new ArrayList<>();
+      ArrayList<PVector[]> existingLines = new ArrayList<>(); 
+      
+      HashMap<PVector, Integer> vertexConnectionCount = new HashMap<>();
+      int maxConnections = 10;
+      
       /// use this to draw the nav mesh graph
       // draw each node
       for (Node node : nodes) {
@@ -273,23 +279,41 @@ class NavMesh
         stroke(0, 255, 0);
         for (int i = 0; i < uniqueVertices.size(); i++) {
           PVector vertex1 = uniqueVertices.get(i);
+          
+          vertexConnectionCount.putIfAbsent(vertex1, 0);
+          if (vertexConnectionCount.get(vertex1) >= maxConnections){
+            continue;
+          }
+          
           for (int j = i + 1; j < uniqueVertices.size(); j++) {
             PVector vertex2 = uniqueVertices.get(j);
             
-            boolean allPointsInside = true;
-            int numSamples = 15;
-            for (int k = 1; k < numSamples; k++) {
-              float t = k / (float)numSamples;
-              PVector samplePoint = PVector.lerp(vertex1, vertex2, t);
+            vertexConnectionCount.putIfAbsent(vertex2, 0);
+            
+            if (vertexConnectionCount.get(vertex1) < maxConnections && vertexConnectionCount.get(vertex2) < maxConnections) {
+              boolean allPointsInside = true;
+              int numSamples = 50;
+              float tolerance = 0.1;
+              if (!isLineOnBoundary(vertex1, vertex2, boundaryWalls, tolerance)) {
+                for (int k = 1; k < numSamples; k++) {
+                  float t = k / (float)numSamples;
+                  PVector samplePoint = PVector.lerp(vertex1, vertex2, t);
               
-              if (!isPointInPolygon(samplePoint, node.polygon)) {
-                allPointsInside = false;
-                break;
+                  if (!isPointInPolygon(samplePoint, node.polygon)) {
+                    allPointsInside = false;
+                    break;
+                  }
+                }
+                //draw line if all sampled points are inside
+                if (allPointsInside  && !intersectsAnyLine(vertex1, vertex2, existingLines)) {
+                  line(vertex1.x, vertex1.y, vertex2.x, vertex2.y);
+                  drawnLines.add(createLineKey(vertex1, vertex2));
+                  existingLines.add(new PVector[]{vertex1, vertex2});
+                  
+                  vertexConnectionCount.put(vertex1, vertexConnectionCount.get(vertex1) + 1);
+                  vertexConnectionCount.put(vertex2, vertexConnectionCount.get(vertex2) + 1);
+                }
               }
-            }
-            if (allPointsInside) {
-              line(vertex1.x, vertex1.y, vertex2.x, vertex2.y);
-              drawnLines.add(createLineKey(vertex1, vertex2));
             }
           }
         }
@@ -298,9 +322,10 @@ class NavMesh
         stroke(0, 255, 255);
         for (Node neighbor : node.neighbors) {
           String neighborLineKey = createLineKey(node.center, neighbor.center);
-          if (!drawnLines.contains(neighborLineKey)) {
+          if (!drawnLines.contains(neighborLineKey) && !intersectsAnyLine(node.center, neighbor.center, existingLines)) {
             line(node.center.x, node.center.y, neighbor.center.x, neighbor.center.y);
             drawnLines.add(neighborLineKey);
+            existingLines.add(new PVector[]{node.center, neighbor.center});
           }
         }
       }
@@ -322,51 +347,71 @@ class NavMesh
      return point1.x + "," + point1.y + "-" + point2.x + "," + point2.y;
    }
    
-   // Function to check if two line segments intersect
-   boolean intersects(PVector p1, PVector p2, PVector p3, PVector p4) {
-    // Calculate the four orientations needed for the general and special cases
-    int o1 = orientation(p1, p2, p3);
-    int o2 = orientation(p1, p2, p4);
-    int o3 = orientation(p3, p4, p1);
-    int o4 = orientation(p3, p4, p2);
-
-    // General case
-    if (o1 != o2 && o3 != o4) {
+    // Check if the two lines intersect
+    boolean intersects(PVector v1Start, PVector v1End, PVector v2Start, PVector v2End) {
+      if (straddles(v1Start, v1End, v2Start, v2End) && straddles(v2Start, v2End, v1Start, v1End)) {
         return true;
+      }
+      // Check for collinear overlapping segments
+      if (collinear(v1Start, v1End, v2Start, v2End)) {
+        // If the lines are collinear, check if any of the points are on the other's segment
+        if (pointOnSegment(v1Start, v2Start, v2End) || 
+            pointOnSegment(v1End, v2Start, v2End) || 
+            pointOnSegment(v2Start, v1Start, v1End) || 
+            pointOnSegment(v2End, v1Start, v1End)) {
+            return true;
+        }
+      }
+      return false;
     }
 
-    // Special cases
-    // p1, p2 and p3 are collinear and p3 lies on segment p1p2
-    if (o1 == 0 && onSegment(p1, p3, p2)) return true;
+    // Check if the two lines straddle each other
+    boolean straddles(PVector p1, PVector p2, PVector q1, PVector q2) {
+        float cross1 = crossProduct(p1, p2, q1);
+        float cross2 = crossProduct(p1, p2, q2);
+        return cross1 * cross2 < -0.00001;
+    }
 
-    // p1, p2 and p4 are collinear and p4 lies on segment p1p2
-    if (o2 == 0 && onSegment(p1, p4, p2)) return true;
+    // Cross product function
+    float crossProduct(PVector a, PVector b, PVector c) {
+        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    }
 
-    // p3, p4 and p1 are collinear and p1 lies on segment p3p4
-    if (o3 == 0 && onSegment(p3, p1, p4)) return true;
+    // Check if two lines are collinear
+    boolean collinear(PVector p1, PVector p2, PVector q1, PVector q2) {
+        return (crossProduct(p1, p2, q1) == 0) && (crossProduct(p1, p2, q2) == 0);
+    }
 
-    // p3, p4 and p2 are collinear and p2 lies on segment p3p4
-    if (o4 == 0 && onSegment(p3, p2, p4)) return true;
-
-    // Doesn't fall in any of the above cases
+    // Check if point is on the line segment
+    boolean pointOnSegment(PVector p, PVector v, PVector w) {
+        return (p.x <= Math.max(v.x, w.x) && p.x >= Math.min(v.x, w.x) &&
+                p.y <= Math.max(v.y, w.y) && p.y >= Math.min(v.y, w.y));
+    }
+    
+  // Helper method to check if a line intersects with any existing lines
+  boolean intersectsAnyLine(PVector start, PVector end, ArrayList<PVector[]> existingLines) {
+    for (PVector[] line : existingLines) {
+        if (intersects(start, end, line[0], line[1])) {
+            return true;
+        }
+    }
     return false;
   }
-
-  // Function to find the orientation of the ordered triplet (p, q, r)
-  // Returns:
-  // 0 -> p, q and r are collinear
-  // 1 -> Clockwise
-  // 2 -> Counterclockwise
-  int orientation(PVector p, PVector q, PVector r) {
-    float val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
-    if (val == 0) return 0;  // collinear
-    return (val > 0) ? 1 : 2; // clock or counterclock wise
+  
+  boolean isLineOnBoundary(PVector vertex1, PVector vertex2, ArrayList<Wall> boundaryWalls, float tolerance) {
+    for (Wall boundaryWall : boundaryWalls) {  // Assuming boundaryWalls is a list of boundary walls
+        if (arePointsEqual(vertex1, boundaryWall.start, tolerance) && arePointsEqual(vertex2, boundaryWall.end, tolerance)) {
+            return true;
+        }
+        if (arePointsEqual(vertex1, boundaryWall.end, tolerance) && arePointsEqual(vertex2, boundaryWall.start, tolerance)) {
+            return true;
+        }
+    }
+    return false;  // The line is not on the boundary
   }
-
-  // Function to check if point q lies on segment pr
-  boolean onSegment(PVector p, PVector q, PVector r) {
-    return (q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) &&
-            q.y <= Math.max(p.y, r.y) && q.y >= Math.min(p.y, r.y));
+  
+  boolean arePointsEqual(PVector p1, PVector p2, float tolerance) {
+    return PVector.dist(p1, p2) <= tolerance;
   }
 
 }
