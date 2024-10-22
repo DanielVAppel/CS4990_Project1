@@ -24,6 +24,8 @@ class Boid
    float rotational_acceleration;
    KinematicMovement kinematic;
    PVector target;
+   final float ARRIVAL_THRESHOLD = 5.0;  // Adjust the value to suit the proximity tolerance
+
    
    Boid(PVector position, float heading, float max_speed, float max_rotational_speed, float acceleration, float rotational_acceleration)
    {
@@ -128,6 +130,17 @@ class Boid
       
    }
    
+   void followPath(ArrayList<PVector> path) {
+    if (!path.isEmpty()) {
+        PVector nextWaypoint = path.get(0);  // Get the first waypoint
+        if (PVector.dist(kinematic.getPosition(), nextWaypoint) < ARRIVAL_THRESHOLD) {
+            path.remove(0);  // Remove waypoint when reached
+        } else {
+            seek(nextWaypoint);  // Move towards the next waypoint
+        }
+    }
+}
+
    void follow(ArrayList<PVector> waypoints) {
      if (waypoints.size() > 0) {
        target = waypoints.get(0);  // Set the first waypoint as the target

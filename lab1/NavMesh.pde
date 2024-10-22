@@ -12,6 +12,17 @@ class Node
    PVector center;
    ArrayList<Node> neighbors;
    ArrayList<Wall> connections;
+   
+   // A* pathfinding related variables
+    float gCost;  // Cost from the start node to this node
+    float fCost;  // Total estimated cost (gCost + heuristic)
+    Node parent;  // For backtracking the path during A* search
+
+    Node() {
+        this.gCost = Float.MAX_VALUE;  // Set initial gCost to a large value
+        this.fCost = Float.MAX_VALUE;  // Set initial fCost to a large value
+        this.parent = null;  // Initially, no parent node
+    }
 }
 
 
@@ -413,5 +424,61 @@ class NavMesh
   boolean arePointsEqual(PVector p1, PVector p2, float tolerance) {
     return PVector.dist(p1, p2) <= tolerance;
   }
+
+ArrayList<PVector> aStar(Node startNode, Node endNode) {
+    PriorityQueue<Node> openSet = new PriorityQueue<>(Comparator.comparingDouble(n -> n.fCost));
+    ArrayList<Node> closedSet = new ArrayList<>();
+    
+    startNode.gCost = 0;
+    startNode.fCost = heuristic(startNode.center, endNode.center);
+    openSet.add(startNode);
+
+    while (!openSet.isEmpty()) {
+        Node current = openSet.poll();
+
+        // If we reached the end node, reconstruct the path
+        if (current == endNode) {
+            return reconstructPath(endNode);
+        }
+
+        closedSet.add(current);
+
+        // Check all neighbors
+        for (Node neighbor : current.neighbors) {
+            if (closedSet.contains(neighbor)) continue;
+
+            float tentativeG = current.gCost + dist(current.center.x, current.center.y, neighbor.center.x, neighbor.center.y);
+
+            if (!openSet.contains(neighbor) || tentativeG < neighbor.gCost) {
+                neighbor.gCost = tentativeG;
+                neighbor.fCost = tentativeG + heuristic(neighbor.center, endNode.center);
+                neighbor.parent = current;
+
+                if (!openSet.contains(neighbor)) {
+                    openSet.add(neighbor);
+                }
+            }
+        }
+    }
+    
+    return null;  // No path found
+}
+
+ArrayList<PVector> reconstructPath(Node endNode) {
+    ArrayList<PVector> path = new ArrayList<>();
+    Node current = endNode;
+
+    while (current != null) {
+        path.add(current.center);  // Add the center of the polygon as a waypoint
+        current = current.parent;
+    }
+
+    Collections.reverse(path);  // Reverse the path so it goes from start to end
+    return path;
+}
+    // Heuristic function (Euclidean distance)
+    float heuristic(PVector p1, PVector p2) {
+        return dist(p1.x, p1.y, p2.x, p2.y);
+    }
 
 }
