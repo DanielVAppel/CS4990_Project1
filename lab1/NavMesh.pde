@@ -430,7 +430,7 @@ class NavMesh
       Node endNode = getClosestNode(destination);
       
       if (startNode == null || endNode == null) {
-        throw new IllegalArgumentException("No valid start or end node found!");
+        return new ArrayList<>();
       }
       
       startNode.gCost = 0;

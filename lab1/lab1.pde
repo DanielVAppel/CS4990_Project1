@@ -36,12 +36,12 @@ void mousePressed() {
   if (!map.isReachable(target)) return;
   if (mouseButton == LEFT)
   {
+    ArrayList<PVector> path = nm.findPath(billy.kinematic.getPosition(), target);
     if (waypoints.isEmpty()) //(waypoints.size() == 0)
      {
        billy.seek(target);
      }
      else {
-       ArrayList<PVector> path = nm.findPath(billy.kinematic.getPosition(), target);
        if (path == null || path.isEmpty()) {
          System.out.println("No path found");
        }
