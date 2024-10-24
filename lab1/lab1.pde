@@ -36,16 +36,21 @@ void mousePressed() {
   if (!map.isReachable(target)) return;
   if (mouseButton == LEFT)
   {
-     
-     if (waypoints.isEmpty()) //(waypoints.size() == 0)
+    if (waypoints.isEmpty()) //(waypoints.size() == 0)
      {
-        billy.seek(target);
+       billy.seek(target);
      }
-     else
-     {
-        waypoints.add(target);
-        entering_path = false;
-        billy.follow(waypoints);
+     else {
+       ArrayList<PVector> path = nm.findPath(billy.kinematic.getPosition(), target);
+       if (path == null || path.isEmpty()) {
+         System.out.println("No path found");
+       }
+       else {
+         waypoints.addAll(path);
+         waypoints.add(target);
+         entering_path = false;
+         billy.followPath(waypoints);
+       }
      }
   }
   else if (mouseButton == RIGHT)
@@ -141,23 +146,6 @@ void draw() {
         line(current.x, current.y, mouseX, mouseY);
   }
   
-  // Pathfinding logic moved into the draw function
-  if (!waypoints.isEmpty()) {
-    println("Waypoints exist, finding path...");
-    PVector destination = waypoints.get(waypoints.size() - 1);
-
-    if (destination != null) {
-        ArrayList<PVector> path = nm.findPath(billy.kinematic.getPosition(), destination);
-
-        // If a path is found and it's not empty, pass it to Billy to follow
-        if (path != null && !path.isEmpty()) {
-            println("Path found, following path.");
-            billy.followPath(path);
-        } else {
-            println("Path not found or empty.");
-        }
-    }
-  }
 
   float dt = (millis() - lastt)/1000.0;
   lastt = millis();
@@ -194,5 +182,6 @@ void draw() {
       text("Press any key to close", width*0.5 - 80, height*0.75 - 80);
       textSize(12);
   }
+  
   
 }

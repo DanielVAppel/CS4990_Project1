@@ -71,7 +71,7 @@ class Boid
             
             //Move to the next waypoint if within the threshold
             if (distance_to_target < 16) {
-              follow(waypoints);
+              followPath(waypoints);
             }
         }
         else
