@@ -37,26 +37,23 @@ void mousePressed() {
   if (mouseButton == LEFT)
   {
     ArrayList<PVector> path = nm.findPath(billy.kinematic.getPosition(), target);
-    if (waypoints.isEmpty()) //(waypoints.size() == 0)
+    if (path == null || path.isEmpty()) //(waypoints.size() == 0)
      {
-       billy.seek(target);
+       System.out.println("No path found");
      }
      else {
-       if (path == null || path.isEmpty()) {
-         System.out.println("No path found");
-       }
-       else {
-         waypoints.addAll(path);
-         waypoints.add(target);
-         entering_path = false;
-         billy.followPath(waypoints);
-       }
+       System.out.println("Path found: " + path);
+       waypoints.clear();
+       waypoints.addAll(path);
+       waypoints.add(target);
+       entering_path = false;
+       billy.followPath(waypoints);
      }
   }
   else if (mouseButton == RIGHT)
   {
      if (!entering_path)
-        waypoints = new ArrayList<PVector>();
+        waypoints.clear();
      waypoints.add(target);
      entering_path = true; 
   }

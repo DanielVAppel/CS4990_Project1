@@ -94,14 +94,16 @@ class NavMesh
                PVector otherMidpoint = getMidpoint(otherWall);
                Node otherMidpointNode = midpointNodeMap.get(otherMidpoint);
                if (otherMidpointNode != null && !midpointNode.neighbors.contains(otherMidpointNode)) {
-                 midpointNode.neighbors.add(otherMidpointNode);
-                 otherMidpointNode.neighbors.add(midpointNode);
-                 
-                 midpointNode.connections.add(wall);
-                 otherMidpointNode.connections.add(otherWall);
+                 Wall pathSegment = new Wall(midpointNode.center, otherMidpointNode.center);
+                   if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
+                     midpointNode.neighbors.add(otherMidpointNode);
+                     otherMidpointNode.neighbors.add(midpointNode);
+                     midpointNode.connections.add(pathSegment);
+                     otherMidpointNode.connections.add(pathSegment);
+                   }
+                 }
                }
-             }
-           }
+            }
          }
        }
        //add main node for the polygon nodes list
@@ -111,6 +113,12 @@ class NavMesh
          totalConnections += node.connections.size();
        }
        System.out.println("Total nodes connections: " + totalConnections);
+       for (Node node : nodes) {
+        System.out.println("Node: " + node.center);
+        for (Node neighbor : node.neighbors) {
+            System.out.println("  Connected to: " + neighbor.center);
+        }
+      }
    }
    
    //helper methods
@@ -130,6 +138,7 @@ class NavMesh
      for (Wall wallA : polygonA) {
        for (Wall wallB : polygonB) {
          if (wallsAreEqual(wallA, wallB)) {
+           System.out.println("Shared Edge: " + wallA.start + " to " + wallA.end);
            return wallA;
          }
        }
@@ -422,6 +431,10 @@ class NavMesh
    //method for A* search
    ArrayList<PVector> findPath(PVector start, PVector destination)
    {
+     // Reset node parents to avoid stuck loop
+    for (Node node : nodes) {
+        node.parent = null;
+      }
       /// implement A* to find a path
       PriorityQueue<Node> openSet = new PriorityQueue<>(Comparator.comparingDouble(n -> n.fCost));
       ArrayList<Node> closedSet = new ArrayList<>();
@@ -430,6 +443,7 @@ class NavMesh
       Node endNode = getClosestNode(destination);
       
       if (startNode == null || endNode == null) {
+        System.out.println("Start or end node is null.");
         return new ArrayList<>();
       }
       
@@ -450,7 +464,8 @@ class NavMesh
 
         // Check all neighbors
         for (Node neighbor : current.neighbors) {
-            if (closedSet.contains(neighbor)) continue;
+            Wall pathSegment = new Wall(current.center, neighbor.center);
+            if (closedSet.contains(neighbor) || doesEdgeIntersectPolygon(pathSegment, map.outline)) continue;
 
             float tentativeG = current.gCost + dist(current.center.x, current.center.y, neighbor.center.x, neighbor.center.y);
 
@@ -465,7 +480,7 @@ class NavMesh
             }
         }
     }
-    
+    System.out.println("No path found.");
     return null;  // No path found
    }
    
@@ -484,17 +499,24 @@ class NavMesh
          closestNode = node;
        }
      }
-     return closestNode;
+     if (closestNode != null) {
+        System.out.println("Closest Node found at: " + closestNode.center + " with distance: " + minDistance);
+    } else {
+        System.out.println("No Closest Node found for position: " + position);
+    }
+    return closestNode;
    }
    
    ArrayList<PVector> reconstructPath(Node endNode) {
      ArrayList<PVector> path = new ArrayList<>();
      Node currentNode = endNode;
      while (currentNode != null) {
+       System.out.println("Node: " + currentNode.center);  // Debug print
        path.add(currentNode.center);
        currentNode = currentNode.parent;
      }
      Collections.reverse(path);
+     System.out.println("Reconstructed path: " + path);  // Debug print
      return path;
    }
    //end helper methods for A*
