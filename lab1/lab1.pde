@@ -39,6 +39,7 @@ void mousePressed() {
     ArrayList<PVector> path = nm.findPath(billy.kinematic.getPosition(), target);
     if (path == null || path.isEmpty()) //(waypoints.size() == 0)
      {
+       billy.seek(target);
        System.out.println("No path found");
      }
      else {

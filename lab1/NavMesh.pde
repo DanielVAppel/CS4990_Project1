@@ -34,92 +34,82 @@ class Node
 class NavMesh
 {   
    ArrayList<Node> nodes;
-   final int maxConnections = 1;
-   HashMap<PVector, Integer> cornerConnectionCount = new HashMap<>();
    
-   // Check if we can connect to a corner
-   boolean canConnectToCorner(PVector corner) {
-     return cornerConnectionCount.getOrDefault(corner, 0) < maxConnections;
-   }
+   void bake(Map map) {
+    nodes = new ArrayList<>();
+    HashMap<PVector, Node> midpointNodeMap = new HashMap<>();
+    ArrayList<Wall> outline = new ArrayList<>(map.outline);
+    ArrayList<ArrayList<Wall>> polygons = splitIntoConvexPolygons(outline, map);
 
-  // Increment the connection count for a corner
-  void incrementConnectionCount(PVector corner) {
-    int currentCount = cornerConnectionCount.getOrDefault(corner, 0);
-    cornerConnectionCount.put(corner, currentCount + 1);
-  }
-   
-   void bake(Map map)
-   {
-       /// generate the graph you need for pathfinding
-       nodes = new ArrayList<>();
-       
-       HashMap<PVector, Node> midpointNodeMap = new HashMap<>();
-       
-       //start with the original outline
-       ArrayList<Wall> outline = new ArrayList<>(map.outline);
-       
-       //Store edges that are created to help check intersections
-       
-       //split map outline into convex polygons
-       ArrayList<ArrayList<Wall>> polygons = splitIntoConvexPolygons(outline, map);
-       
-       int nodeId = 0;
-       for (ArrayList<Wall> polygon : polygons) {
-         
-         for (Wall wall : polygon) {
-           
-           if (outline.contains(wall)) {
-             continue;
-           }
-           
-           PVector midpoint = getMidpoint(wall);
-           
-           Node midpointNode = midpointNodeMap.get(midpoint);
-           if (midpointNode == null) {
-             midpointNode = new Node();
-             midpointNode.id = nodeId++;
-             midpointNode.polygon = polygon;
-             midpointNode.center = midpoint;
-             midpointNode.neighbors = new ArrayList<>();
-             midpointNode.connections = new ArrayList<>();
-             nodes.add(midpointNode);
-             midpointNodeMap.put(midpoint, midpointNode);
-           }
-           
-           
-           //connect neighboring midpoint nodes
-           
-           for (Wall otherWall : polygon) {
-             if (otherWall != wall) {
-               PVector otherMidpoint = getMidpoint(otherWall);
-               Node otherMidpointNode = midpointNodeMap.get(otherMidpoint);
-               if (otherMidpointNode != null && !midpointNode.neighbors.contains(otherMidpointNode)) {
-                 Wall pathSegment = new Wall(midpointNode.center, otherMidpointNode.center);
-                   if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
-                     midpointNode.neighbors.add(otherMidpointNode);
-                     otherMidpointNode.neighbors.add(midpointNode);
-                     midpointNode.connections.add(pathSegment);
-                     otherMidpointNode.connections.add(pathSegment);
-                   }
-                 }
-               }
+    int nodeId = 0;
+    for (ArrayList<Wall> polygon : polygons) {
+        for (Wall wall : polygon) {
+            if (outline.contains(wall)) {
+                continue;
             }
-         }
-       }
-       //add main node for the polygon nodes list
-       System.out.println("Total nodes: " + nodes.size());
-       int totalConnections = 0;
-       for (Node node : nodes) {
-         totalConnections += node.connections.size();
-       }
-       System.out.println("Total nodes connections: " + totalConnections);
-       for (Node node : nodes) {
+
+            PVector midpoint = getMidpoint(wall);
+            Node midpointNode = midpointNodeMap.get(midpoint);
+            if (midpointNode == null) {
+                midpointNode = new Node();
+                midpointNode.id = nodeId++;
+                midpointNode.polygon = polygon;
+                midpointNode.center = midpoint;
+                midpointNode.neighbors = new ArrayList<>();
+                midpointNode.connections = new ArrayList<>();
+                nodes.add(midpointNode);
+                midpointNodeMap.put(midpoint, midpointNode);
+            }
+
+            for (Wall otherWall : polygon) {
+                if (otherWall != wall) {
+                    PVector otherMidpoint = getMidpoint(otherWall);
+                    Node otherMidpointNode = midpointNodeMap.get(otherMidpoint);
+                    if (otherMidpointNode != null && !midpointNode.neighbors.contains(otherMidpointNode)) {
+                        Wall pathSegment = new Wall(midpointNode.center, otherMidpointNode.center);
+                        if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
+                            midpointNode.neighbors.add(otherMidpointNode);
+                            otherMidpointNode.neighbors.add(midpointNode);
+                            midpointNode.connections.add(pathSegment);
+                            otherMidpointNode.connections.add(pathSegment);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Connecting nodes across adjacent polygons
+    for (Node node : nodes) {
+        for (Node otherNode : nodes) {
+            if (node != otherNode && !node.neighbors.contains(otherNode)) {
+                Wall pathSegment = new Wall(node.center, otherNode.center);
+                if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
+                    node.neighbors.add(otherNode);
+                    otherNode.neighbors.add(node);
+                    node.connections.add(pathSegment);
+                    otherNode.connections.add(pathSegment);
+                }
+            }
+        }
+    }
+
+    // Print debug information
+    System.out.println("Total nodes: " + nodes.size());
+    int totalConnections = 0;
+    for (Node node : nodes) {
+        totalConnections += node.connections.size();
+    }
+    System.out.println("Total nodes connections: " + totalConnections);
+    for (Node node : nodes) {
         System.out.println("Node: " + node.center);
         for (Node neighbor : node.neighbors) {
             System.out.println("  Connected to: " + neighbor.center);
         }
-      }
-   }
+    }
+}
+
+
    
    //helper methods
    
@@ -151,60 +141,53 @@ class NavMesh
    }
 
    //split map into polygons and return the list of polygons
-   ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map map) {
-     
-     ArrayList<Wall> createdSplitEdges = new ArrayList<>();
-     ArrayList<ArrayList<Wall>> convexPolygons = new ArrayList<>();
-     ArrayList<ArrayList<Wall>> polygonQueue = new ArrayList<>();
-     polygonQueue.add(new ArrayList<>(outline));
-     
-     final int maxIterations = 1000;
-     int iterations = 0;
-     final int MAX_POLYGONS = 1000;
-    
-     while (!polygonQueue.isEmpty() && iterations < maxIterations) {
-       ArrayList<Wall> currentPolygon = polygonQueue.remove(0);
-       if (hasReflexVertices(currentPolygon)) {
-         //if current polygon has reflex vertices. split it
-         ArrayList<PVector> reflexVertices = findReflexVertices(currentPolygon);
-         for (PVector reflexVertex : reflexVertices) {
-           Wall splitEdge = createSplitEdge(reflexVertex, currentPolygon);
-           if (splitEdge != null && !doesEdgeIntersectPolygon(splitEdge, createdSplitEdges) && !doesEdgeIntersectPolygon(splitEdge, map.outline)) {
-             PVector midpoint = getMidpoint(splitEdge);
-             
-             if (isPointInPolygon(midpoint, currentPolygon) && map.isReachable(midpoint)) {
-               createdSplitEdges.add(splitEdge);
-               incrementConnectionCount(reflexVertex); // Increment the connection count
-               ArrayList<ArrayList<Wall>> splitPolygons = splitPolygonAlongEdge(currentPolygon, reflexVertex, splitEdge);
-               
-               //add both split polygons to the queue
-               for (ArrayList<Wall> polygon : splitPolygons) {
-                 if (!hasReflexVertices(polygon) && !splitPolygons.contains(polygon)) {
-                   convexPolygons.add(polygon);
-                   iterations++;
-                 }
-                 else {
-                   polygonQueue.add(polygon);
-                 }
-               }
-             }
-             else {
-               System.out.println("Midpoint outside polygon");
-             }
-           }
-         }
-       }
-       else {
-         convexPolygons.add(currentPolygon); //add to final list if already convex
-       }
-       if (convexPolygons.size() >= MAX_POLYGONS) {
-         System.out.println("Polygon limit reached");
-         break;
-       }
-     }
-     System.out.println("Convex Polygon Count: " + convexPolygons.size());
-     return convexPolygons;
-  }
+ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map map) {
+    ArrayList<Wall> createdSplitEdges = new ArrayList<>();
+    ArrayList<ArrayList<Wall>> convexPolygons = new ArrayList<>();
+    ArrayList<ArrayList<Wall>> polygonQueue = new ArrayList<>();
+    polygonQueue.add(new ArrayList<>(outline));
+
+    final int maxIterations = 1000;
+    int iterations = 0;
+
+    while (!polygonQueue.isEmpty() && iterations < maxIterations) {
+        ArrayList<Wall> currentPolygon = polygonQueue.remove(0);
+        if (hasReflexVertices(currentPolygon)) {
+            ArrayList<PVector> reflexVertices = findReflexVertices(currentPolygon);
+            for (PVector reflexVertex : reflexVertices) {
+                Wall splitEdge = createSplitEdge(reflexVertex, currentPolygon);
+                if (splitEdge != null && !doesEdgeIntersectPolygon(splitEdge, createdSplitEdges) && !doesEdgeIntersectPolygon(splitEdge, map.outline)) {
+                    PVector midpoint = getMidpoint(splitEdge);
+
+                    if (isPointInPolygon(midpoint, currentPolygon) && map.isReachable(midpoint)) {
+                        createdSplitEdges.add(splitEdge);
+
+                        ArrayList<ArrayList<Wall>> splitPolygons = splitPolygonAlongEdge(currentPolygon, reflexVertex, splitEdge);
+
+                        for (ArrayList<Wall> polygon : splitPolygons) {
+                            if (isConvexPolygon(polygon)) {
+                                convexPolygons.add(polygon);
+                            } else {
+                                polygonQueue.add(polygon);
+                            }
+                        }
+                        iterations++;
+                    }
+                }
+            }
+        } else {
+            convexPolygons.add(currentPolygon);
+        }
+
+        if (convexPolygons.size() >= maxIterations) {
+            System.out.println("Polygon limit reached");
+            break;
+        }
+    }
+
+    System.out.println("Convex Polygon Count: " + convexPolygons.size());
+    return convexPolygons;
+}
   
   boolean isConvexPolygon(ArrayList<Wall> polygon) {
      for (int i = 0; i < polygon.size(); i++) {
@@ -356,53 +339,39 @@ class NavMesh
     }*/
     
     ArrayList<ArrayList<Wall>> splitPolygonAlongEdge(ArrayList<Wall> polygon, PVector reflexVertex, Wall splitEdge) {
-      ArrayList<Wall> firstPolygon = new ArrayList<>();
-      ArrayList<Wall> secondPolygon = new ArrayList<>();
-      
-      boolean addingToFirstPolygon = true;
-      boolean foundSplitStart = false;
-      boolean foundSplitEnd = false;
-      
-      HashSet<ArrayList<Wall>> uniquePolygons = new HashSet<>();
-      
-      //walk through the polygon's walls and distribute them between two new polygons
-      for (int i = 0; i < polygon.size(); i++) {
-        Wall currentWall = polygon.get(i);
-        
-        //check if we found the start of the split edge
-        if (!foundSplitStart && (currentWall.start.equals(splitEdge.start) || currentWall.end.equals(splitEdge.start))) {
-          foundSplitStart = true;
-          firstPolygon.add(currentWall); //start adding to first polygon
-          addingToFirstPolygon = true;
+    ArrayList<Wall> firstPolygon = new ArrayList<>();
+    ArrayList<Wall> secondPolygon = new ArrayList<>();
+
+    boolean addingToFirstPolygon = true;
+    boolean foundSplitStart = false;
+
+    for (Wall wall : polygon) {
+        if (!foundSplitStart && (wall.start.equals(splitEdge.start) || wall.end.equals(splitEdge.start))) {
+            foundSplitStart = true;
+            firstPolygon.add(wall);
+            addingToFirstPolygon = true;
         }
-        
-        //add walls to the current polygon (first or second)
+
         if (addingToFirstPolygon) {
-          firstPolygon.add(currentWall);
+            firstPolygon.add(wall);
+        } else {
+            secondPolygon.add(wall);
         }
-        else {
-          secondPolygon.add(currentWall);
+
+        if (foundSplitStart && (wall.start.equals(splitEdge.end) || wall.end.equals(splitEdge.end))) {
+            addingToFirstPolygon = false;
         }
-        if (foundSplitStart && (currentWall.start.equals(splitEdge.end) || currentWall.end.equals(splitEdge.end))) {
-          foundSplitEnd = true;
-          addingToFirstPolygon = false; //switch to adding to the second polygon
-        }
-      }
-      
-      //add split edge to both polygons
-      firstPolygon.add(splitEdge);
-      secondPolygon.add(new Wall(splitEdge.end, splitEdge.start)); //reverse edge for second polygon
-      
-      if (uniquePolygons.add(firstPolygon)) {
-        uniquePolygons.add(firstPolygon);
-      }
-      if (uniquePolygons.add(secondPolygon)) {
-        uniquePolygons.add(secondPolygon);
-      }
-      
-      //return both polygons as an array of polygons
-      ArrayList<ArrayList<Wall>> splitPolygons = new ArrayList<>(uniquePolygons);
-      return splitPolygons;
+    }
+
+    // Add split edge to both polygons
+    firstPolygon.add(splitEdge);
+    secondPolygon.add(new Wall(splitEdge.end, splitEdge.start)); // reverse edge for second polygon
+
+    ArrayList<ArrayList<Wall>> splitPolygons = new ArrayList<>();
+    splitPolygons.add(firstPolygon);
+    splitPolygons.add(secondPolygon);
+
+    return splitPolygons;
     }
    
    //calculates centroid of a polygon
