@@ -40,10 +40,8 @@ void mousePressed() {
     if (path == null || path.isEmpty()) //(waypoints.size() == 0)
      {
        billy.seek(target);
-       System.out.println("No path found");
      }
      else {
-       System.out.println("Path found: " + path);
        waypoints.clear();
        waypoints.addAll(path);
        waypoints.add(target);

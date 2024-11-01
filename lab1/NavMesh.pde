@@ -1,7 +1,9 @@
 // Useful to sort lists by a custom key
 import java.util.Comparator;
+import java.util.stream.Collectors;
 import java.util.Collections;
 import java.util.PriorityQueue;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 
@@ -34,236 +36,234 @@ class Node
 class NavMesh
 {   
    ArrayList<Node> nodes;
+   ArrayList<Vertex> vertices;
+   ArrayList<Wall> walls;
    
    void bake(Map map) {
     nodes = new ArrayList<>();
-    HashMap<PVector, Node> midpointNodeMap = new HashMap<>();
-    ArrayList<Wall> outline = new ArrayList<>(map.outline);
-    ArrayList<ArrayList<Wall>> polygons = splitIntoConvexPolygons(outline, map);
-
-    int nodeId = 0;
-    for (ArrayList<Wall> polygon : polygons) {
-        for (Wall wall : polygon) {
-            if (outline.contains(wall)) {
-                continue;
-            }
-
-            PVector midpoint = getMidpoint(wall);
-            Node midpointNode = midpointNodeMap.get(midpoint);
-            if (midpointNode == null) {
-                midpointNode = new Node();
-                midpointNode.id = nodeId++;
-                midpointNode.polygon = polygon;
-                midpointNode.center = midpoint;
-                midpointNode.neighbors = new ArrayList<>();
-                midpointNode.connections = new ArrayList<>();
-                nodes.add(midpointNode);
-                midpointNodeMap.put(midpoint, midpointNode);
-            }
-
-            for (Wall otherWall : polygon) {
-                if (otherWall != wall) {
-                    PVector otherMidpoint = getMidpoint(otherWall);
-                    Node otherMidpointNode = midpointNodeMap.get(otherMidpoint);
-                    if (otherMidpointNode != null && !midpointNode.neighbors.contains(otherMidpointNode)) {
-                        Wall pathSegment = new Wall(midpointNode.center, otherMidpointNode.center);
-                        if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
-                            midpointNode.neighbors.add(otherMidpointNode);
-                            otherMidpointNode.neighbors.add(midpointNode);
-                            midpointNode.connections.add(pathSegment);
-                            otherMidpointNode.connections.add(pathSegment);
-                        }
-                    }
-                }
-            }
-        }
+    ArrayList<Wall> walls = map.outline;
+    walls = generateNavMesh(walls);
+    
+    ArrayList<HashSet<PVector>> lineSegments = new ArrayList<>();
+    for (Wall wall : walls) {
+        HashSet<PVector> segment = new HashSet<>(Arrays.asList(wall.start, wall.end));
+        lineSegments.add(segment);
     }
-
-    // Connecting nodes across adjacent polygons
-    for (Node node : nodes) {
-        for (Node otherNode : nodes) {
-            if (node != otherNode && !node.neighbors.contains(otherNode)) {
-                Wall pathSegment = new Wall(node.center, otherNode.center);
-                if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
-                    node.neighbors.add(otherNode);
-                    otherNode.neighbors.add(node);
-                    node.connections.add(pathSegment);
-                    otherNode.connections.add(pathSegment);
-                }
-            }
-        }
-    }
-
-    // Print debug information
-    System.out.println("Total nodes: " + nodes.size());
-    int totalConnections = 0;
-    for (Node node : nodes) {
-        totalConnections += node.connections.size();
-    }
-    System.out.println("Total nodes connections: " + totalConnections);
-    for (Node node : nodes) {
-        System.out.println("Node: " + node.center);
-        for (Node neighbor : node.neighbors) {
-            System.out.println("  Connected to: " + neighbor.center);
-        }
-    }
-}
+    ArrayList<ArrayList<Wall>> polygons = generatePolygons(vertices, lineSegments);
+   }
 
 
    
    //helper methods
-   
-   boolean polygonsAreAdjacent(ArrayList<Wall> polygonA, ArrayList<Wall> polygonB) {
-     for (Wall wallA : polygonA) {
-       for (Wall wallB : polygonB) {
-         if (wallsAreEqual(wallA, wallB)) {
-           return true;
-         }
-       }
-     }
-     return false;
+   boolean collides(PVector from, PVector to, ArrayList<Wall> navmesh)
+   {
+      for (Wall w : navmesh) {
+         if (w.crosses(from, to)) return true;
+      }
+      return false;
    }
    
-   Wall findSharedEdge(ArrayList<Wall> polygonA, ArrayList<Wall> polygonB) {
-     for (Wall wallA : polygonA) {
-       for (Wall wallB : polygonB) {
-         if (wallsAreEqual(wallA, wallB)) {
-           System.out.println("Shared Edge: " + wallA.start + " to " + wallA.end);
-           return wallA;
-         }
-       }
-     }
-     return null;
-   }
-   
-   boolean wallsAreEqual(Wall wallA, Wall wallB) {
-     return (wallA.start.equals(wallB.start) && wallA.end.equals(wallB.end)) || (wallA.start.equals(wallB.end) && wallA.end.equals(wallB.start));
-   }
-
-   //split map into polygons and return the list of polygons
-ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map map) {
-    ArrayList<Wall> createdSplitEdges = new ArrayList<>();
-    ArrayList<ArrayList<Wall>> convexPolygons = new ArrayList<>();
-    ArrayList<ArrayList<Wall>> polygonQueue = new ArrayList<>();
-    polygonQueue.add(new ArrayList<>(outline));
-
-    final int maxIterations = 1000;
-    int iterations = 0;
-
-    while (!polygonQueue.isEmpty() && iterations < maxIterations) {
-        ArrayList<Wall> currentPolygon = polygonQueue.remove(0);
-        if (hasReflexVertices(currentPolygon)) {
-            ArrayList<PVector> reflexVertices = findReflexVertices(currentPolygon);
-            for (PVector reflexVertex : reflexVertices) {
-                Wall splitEdge = createSplitEdge(reflexVertex, currentPolygon);
-                if (splitEdge != null && !doesEdgeIntersectPolygon(splitEdge, createdSplitEdges) && !doesEdgeIntersectPolygon(splitEdge, map.outline)) {
-                    PVector midpoint = getMidpoint(splitEdge);
-
-                    if (isPointInPolygon(midpoint, currentPolygon) && map.isReachable(midpoint)) {
-                        createdSplitEdges.add(splitEdge);
-
-                        ArrayList<ArrayList<Wall>> splitPolygons = splitPolygonAlongEdge(currentPolygon, reflexVertex, splitEdge);
-
-                        for (ArrayList<Wall> polygon : splitPolygons) {
-                            if (isConvexPolygon(polygon)) {
-                                convexPolygons.add(polygon);
-                            } else {
-                                polygonQueue.add(polygon);
-                            }
-                        }
-                        iterations++;
-                    }
-                }
-            }
-        } else {
-            convexPolygons.add(currentPolygon);
-        }
-
-        if (convexPolygons.size() >= maxIterations) {
-            System.out.println("Polygon limit reached");
-            break;
-        }
+   // Get vertices based on walls
+  ArrayList<Vertex> generateVerticesFromWalls(ArrayList<Wall> edges) {
+    vertices = new ArrayList<Vertex>();
+    // In the first iteration of edges we just create vertices
+    for (int i = 0; i < edges.size(); i++) {
+      Wall thisWall = edges.get(i);
+      vertices.add(new Vertex(thisWall.start));
     }
-
-    System.out.println("Convex Polygon Count: " + convexPolygons.size());
-    return convexPolygons;
-}
+    // In the second iteration of edges we associate vertices with their neighbors
+    for (int i = 0; i < vertices.size(); i++) {
+      Vertex prevVertex = vertices.get((i - 1 < 0 ? vertices.size() - 1 : i - 1) %
+      vertices.size());
+      Vertex thisVertex = vertices.get(i);
+      Vertex nextVertex = vertices.get((i + 1) % vertices.size());
+      thisVertex.setPrev(prevVertex);
+      thisVertex.setNext(nextVertex);
+    }
+    return vertices;
+  }
   
-  boolean isConvexPolygon(ArrayList<Wall> polygon) {
-     for (int i = 0; i < polygon.size(); i++) {
-       Wall prev = polygon.get((i - 1 + polygon.size()) % polygon.size());
-       Wall current = polygon.get(i);
-       Wall next = polygon.get((i + 1) % polygon.size());
-       
-       if (isReflex(prev, current, next)) {
-         return false;
-       }
-     }
-     return true;
-   }
-   
-   
-   boolean hasReflexVertices(ArrayList<Wall> polygon) {
-        int size = polygon.size();
-        for (int i = 0; i < size; i++) {
-          Wall prev = polygon.get((i - 1 + size) % size);
-          Wall current = polygon.get(i);
-          Wall next = polygon.get((i + 1) % size);
-          
-          if (isReflex(prev, current, next)) {
-            System.out.println("Reflex at: " + current.end);
-            return true;
+  // Generate the walls we use for navmesh
+  ArrayList<Wall> generateNavMesh(ArrayList<Wall> edges) {
+    ArrayList<Wall> navmesh = new ArrayList<>();
+    for (Wall w : edges) {
+      navmesh.add(w);
+    }
+    ArrayList<Vertex> vertices = generateVerticesFromWalls(edges);
+    //Create new edges to break reflex angles
+    List<Vertex> reflexPoints = vertices.stream().filter(v -> v.isReflexAngle()).collect(Collectors.toList());
+    // While we still have reflex points
+    for (Vertex reflexPoint : reflexPoints) {
+      while (reflexPoint.isReflexAngle()) {
+        // Identify all vertices in line of sight to the reflex angle
+        ArrayList<Vertex> potentialPoints = new ArrayList<Vertex>();
+        for (Vertex potentialPoint : vertices) {
+          if (!potentialPoint.equals(reflexPoint) && (!reflexPoint.isConnectedTo(potentialPoint) || !potentialPoint.isConnectedTo(reflexPoint)) && 
+            (!collides(reflexPoint.vector, potentialPoint.vector, navmesh) && 
+              map.isReachable(new Wall(reflexPoint.vector, potentialPoint.vector).center())) && 
+              map.isReachable(new
+              Wall(PVector.sub(reflexPoint.vector, new PVector(.001, .001)), 
+              potentialPoint.vector).center())) {
+            potentialPoints.add(potentialPoint);
           }
         }
-        System.out.println("No reflex vertex found");
-        return false;
-    }
-
-    ArrayList<PVector> findReflexVertices(ArrayList<Wall> polygon) {
-        ArrayList<PVector> reflexVertices = new ArrayList<>();
-        
-        for (int i = 0; i < polygon.size(); i++) {
-          Wall prev = polygon.get((i - 1 + polygon.size()) % polygon.size());  
-          Wall current = polygon.get(i);
-          Wall next = polygon.get((i + 1) % polygon.size());
-
-            if (isReflex(prev, current, next)) {
-                reflexVertices.add(current.end); // Assuming the reflex point is at the end of the current wall
-            }
+        if (potentialPoints.size() == 0) {
+          println("ERROR: No luck, cannot find a suitable split");
+          System.exit(-1);
         }
-        return reflexVertices;
-    }
-
-    boolean isReflex(Wall prev, Wall current, Wall next) {
-        // Implement logic to determine if the current vertex is a reflex vertex
-        PVector prevEnd = prev.end;
-        PVector currentEnd = current.end;
-        PVector nextEnd = next.end;
-
-        // Check the orientation (you can use cross products or dot products)
-        PVector v1 = PVector.sub(currentEnd, prevEnd);
-        PVector v2 = PVector.sub(nextEnd, currentEnd);
-        
-        float crossProduct = (v1.x * v2.y) - (v1.y * v2.x);
-        return crossProduct > 0; // Returns true if reflex
-    }
-
-    Wall createSplitEdge(PVector reflexVertex, ArrayList<Wall> polygon) {
-      //try to connect valid corner
-      for (int i = 0; i < polygon.size(); i++) {
-        PVector candidate = polygon.get(i).start;
-        if (!candidate.equals(reflexVertex) && !isOnSameLine(reflexVertex, candidate, polygon)) {
-          
-          Wall splitEdge = new Wall(reflexVertex, candidate);
-          PVector midpoint = getMidpoint(splitEdge);
-          if (!isPointInPolygon(midpoint, polygon)) continue;
-          if (!doesEdgeIntersectPolygon(splitEdge, polygon)) {
-            return splitEdge;
-          }
+        // Find the shortest of the new edges we can create
+        List<Wall> potentialEdges = potentialPoints.stream().map(pp -> new
+        Wall(reflexPoint.vector, pp.vector)).collect(Collectors.toList());
+        potentialEdges.sort((w1, w2) ->
+        Float.valueOf(w1.len).compareTo(Float.valueOf(w2.len)));
+        // Sort potentialPoints by how much each point breaks up the reflex angle the more evenly it breaks it the better
+        potentialPoints.sort((p1, p2) ->
+          reflexPoint.testNeighbor(p1).stream().reduce((a1, a2) -> Math.abs(a1 -
+          a2)).get().compareTo(
+          reflexPoint.testNeighbor(p2).stream().reduce((a1, a2) -> Math.abs(a1 -
+          a2)).get()));
+        Wall bestWall = new Wall(reflexPoint.vector, potentialPoints.get(0).vector); // Best wall by breaking angle
+        bestWall = potentialEdges.get(0); // best wall by shortest distance
+        Vertex bestVertex = vertices.get(vertices.lastIndexOf(new
+        Vertex(bestWall.end)));
+        Vertex rVertex = vertices.get(vertices.lastIndexOf(new
+        Vertex(reflexPoint.vector)));
+        rVertex.associate(bestVertex);
+        bestVertex.associate(rVertex);
+        navmesh.add(bestWall);
+        stroke(255, 0, 0);
+        line(bestWall.start.x, bestWall.start.y, bestWall.end.x, bestWall.end.y);
         }
       }
-      return null;
+      return navmesh;
+     }
+ 
+   ArrayList<ArrayList<Wall>> generatePolygons(ArrayList<Vertex> vertices, ArrayList<HashSet<PVector>> lineSegments) {
+      // The result to return
+      ArrayList<ArrayList<Wall>> result = new ArrayList<ArrayList<Wall>>();
+      // Used to track what sets of vertices we've found.
+      ArrayList<HashSet<Vertex>> polygonSets = new ArrayList<HashSet<Vertex>>();
+      // Maps a vertex to how many times we want to visit it. If we hit zero we remove it from the vertexMap (which makes it's key return null)
+      HashMap<Vertex, Integer> vertexMap = new HashMap<Vertex, Integer>();
+      for (Vertex v : vertices) {
+        vertexMap.put(v, Integer.valueOf(v.neighbors.size() - 1));
+      }
+      // While there are still vertices we want to visit
+      while (vertexMap.size() > 0) {
+        // Create a polygon
+        ArrayList<Wall> polygon = new ArrayList<Wall>(); // The walls that make up the polygon. What we actually want to return
+        ArrayList<Vertex> polygonVertices = new ArrayList<Vertex>(); // The vertices of the polygon. Used to do the operations
+        // The vertex we will start our polygon from
+        Vertex start = vertexMap.keySet().iterator().next();
+        // Add start to polygon
+        polygonVertices.add(start);
+        // This one is a bit of a doozy, find a Vertex neighbor of start that we can still visit, and that has an edge to it that we can still visit over
+        // Find a Vertex neighbor of start that we can still visit
+        List<Vertex> validNeighbors = start.neighbors.stream()
+          .filter(neighbor -> vertexMap.get(neighbor) != null && lineSegments.contains(new HashSet<>(Arrays.asList(start.vector, neighbor.vector))))
+          .collect(Collectors.toList());
+
+        if (validNeighbors.isEmpty()) {
+          System.out.println("ERROR: No valid neighbors found for start vertex");
+          break; // or handle the error appropriately
+        }
+        Vertex current = validNeighbors.get(0);
+        // We want to track the last vertex we visited so we know how we reached our current Vertex
+        Vertex last = start;
+        // Actually add to the polygon while we haven't looped back to the start
+        while (!current.equals(start)) {
+          polygonVertices.add(current); // Add current to polygon
+          polygon.add(new Wall(last.vector, current.vector));
+          // Essentially a tuple, index 0 is the right neighbor from this perspective, left from vertex perspective
+          ArrayList<Vertex> options = current.getClosestNeighbors(last, vertexMap.keySet());
+          last = current; // Update last to be current
+          // Just get the closest neighbor to the left of where we came from.
+          if (options.get(1) != null) {
+            current = options.get(1);
+          } else {
+            // This shouldn't be reached, but just in case I want to print something
+            println("ERROR: Reached a dead end");
+            continue;
+          }
+        }
+        // Add the wall from the last vertex we visited to the first
+        polygon.add(new Wall(last.vector, start.vector));
+        if (polygonSets.stream().filter(vSet -> vSet.equals(new
+            HashSet<Vertex>(polygonVertices))).collect(Collectors.toList()).size() != 0) {
+            println("ERROR: We've seen this before");
+            continue;
+        }
+        // Decrement vertexMap and also draw a circle in the center of each polygon
+        PVector center = new PVector();
+        for (Vertex v : polygonVertices) {
+          vertexMap.put(v, vertexMap.get(v) - 1); // Decrement current visits
+          if (vertexMap.get(v) <= 0) {
+            vertexMap.remove(v);
+          }
+          center = PVector.add(center, v.vector);
+        }
+        center.div(polygonVertices.size());
+        circle(center.x, center.y, 10);
+        // Remove the line segments
+        for (int i = 0; i < polygonVertices.size(); i++) {polygonVertices.add(start);
+          // This one is a bit of a doozy, find a Vertex neighbor of start that we can still visit, and that has an edge to it that we can still visit over
+          current = start.neighbors.stream()
+          .filter(neighbor ->
+            vertexMap.get(neighbor) != null && lineSegments.contains(new
+            HashSet<PVector>(Arrays.asList(start.vector, neighbor.vector)))
+            ).collect(Collectors.toList()).get(0);
+          // We want to track the last vertex we visited so we know how we reached our current Vertex
+          last = start;
+          // Actually add to the polygon while we haven't looped back to the start
+          while (!current.equals(start)) {
+            polygonVertices.add(current); // Add current to polygon
+            polygon.add(new Wall(last.vector, current.vector));
+            // Essentially a tuple, index 0 is the right neighbor from this perspective, left from vertex perspective
+            ArrayList<Vertex> options = current.getClosestNeighbors(last,
+            vertexMap.keySet());
+            last = current; // Update last to be current
+            // Just get the closest neighbor to the left of where we came from.
+            if (options.get(1) != null) {
+              current = options.get(1);
+            } else {
+              // This shouldn't be reached, but just in case I want to print something
+              println("ERROR: Reached a dead end");
+              continue;
+            }
+        }
+        // Add the wall from the last vertex we visited to the first
+        polygon.add(new Wall(last.vector, start.vector));
+        if (polygonSets.stream().filter(vSet -> vSet.equals(new
+            HashSet<Vertex>(polygonVertices))).collect(Collectors.toList()).size() != 0) {
+              println("ERROR: We've seen this before");
+              continue;
+        }
+        // Decrement vertexMap and also draw a circle in the center of each polygon
+        center = new PVector();
+        for (Vertex v : polygonVertices) {
+          vertexMap.put(v, vertexMap.get(v) - 1); // Decrement current visits
+          if (vertexMap.get(v) <= 0) {
+            vertexMap.remove(v);
+          }
+          center = PVector.add(center, v.vector);
+        }
+        center.div(polygonVertices.size());
+        circle(center.x, center.y, 10);
+        // Remove the line segments
+        for (int j = 0; j < polygonVertices.size(); j++) {
+          PVector thisVector = polygonVertices.get(j).vector;
+          PVector nextVector = polygonVertices.get((j + 1) % polygonVertices.size()).vector;
+          HashSet<PVector> temp = new HashSet<>();
+          temp.add(thisVector);
+          temp.add(nextVector);
+          lineSegments.remove(temp);
+        }
+        result.add(polygon);
+        polygonSets.add(new HashSet<Vertex>(polygonVertices));
+      }
     }
+    return result;
+  }
     
     PVector getMidpoint(Wall wall) {
       float midpointX = (wall.start.x + wall.end.x) / 2;
@@ -322,80 +322,6 @@ ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map 
     float direction(PVector pi, PVector pj, PVector pk) {
       return (pk.x - pi.x) * (pj.y - pi.y) - (pj.x - pi.x) * (pk.y - pi.y);
     }
-
-    /*ArrayList<Wall> splitPolygon(ArrayList<Wall> polygon) {
-      ArrayList<PVector> reflexVertices = findReflexVertices(polygon);
-      
-      for (PVector reflexVertex : reflexVertices) {
-        Wall splitEdge = createSplitEdge(reflexVertex, polygon);
-        
-        if (splitEdge != null) {
-          ArrayList<Wall> newPolygon = splitPolygonAlongEdge(polygon, reflexVertex, splitEdge);
-          return newPolygon;
-        }
-      }
-      
-      return null;
-    }*/
-    
-    ArrayList<ArrayList<Wall>> splitPolygonAlongEdge(ArrayList<Wall> polygon, PVector reflexVertex, Wall splitEdge) {
-    ArrayList<Wall> firstPolygon = new ArrayList<>();
-    ArrayList<Wall> secondPolygon = new ArrayList<>();
-
-    boolean addingToFirstPolygon = true;
-    boolean foundSplitStart = false;
-
-    for (Wall wall : polygon) {
-        if (!foundSplitStart && (wall.start.equals(splitEdge.start) || wall.end.equals(splitEdge.start))) {
-            foundSplitStart = true;
-            firstPolygon.add(wall);
-            addingToFirstPolygon = true;
-        }
-
-        if (addingToFirstPolygon) {
-            firstPolygon.add(wall);
-        } else {
-            secondPolygon.add(wall);
-        }
-
-        if (foundSplitStart && (wall.start.equals(splitEdge.end) || wall.end.equals(splitEdge.end))) {
-            addingToFirstPolygon = false;
-        }
-    }
-
-    // Add split edge to both polygons
-    firstPolygon.add(splitEdge);
-    secondPolygon.add(new Wall(splitEdge.end, splitEdge.start)); // reverse edge for second polygon
-
-    ArrayList<ArrayList<Wall>> splitPolygons = new ArrayList<>();
-    splitPolygons.add(firstPolygon);
-    splitPolygons.add(secondPolygon);
-
-    return splitPolygons;
-    }
-   
-   //calculates centroid of a polygon
-   PVector calculateCentroid(ArrayList<Wall> polygon) {
-     float cx = 0;
-     float cy = 0;
-     float area = 0;
-     
-     for (int i = 0; i < polygon.size(); i++) {
-       PVector p1 = polygon.get(i).start;
-       PVector p2 = polygon.get((i + 1) % polygon.size()).start; //get next vertex, wrap around
-       
-       float a = (p1.x * p2.y) - (p2.x * p1.y);
-       area += a;
-       cx += (p1.x + p2.x) * a;
-       cy += (p1.y + p2.y) * a;
-     }
-     
-     area *= 0.5;
-     cx /= (6 * area);
-     cy /= (6 * area);
-     
-     return new PVector(cx, cy);
-   }
    
    //method for A* search
    ArrayList<PVector> findPath(PVector start, PVector destination)
@@ -412,7 +338,6 @@ ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map 
       Node endNode = getClosestNode(destination);
       
       if (startNode == null || endNode == null) {
-        System.out.println("Start or end node is null.");
         return new ArrayList<>();
       }
       
@@ -468,11 +393,6 @@ ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map 
          closestNode = node;
        }
      }
-     if (closestNode != null) {
-        System.out.println("Closest Node found at: " + closestNode.center + " with distance: " + minDistance);
-    } else {
-        System.out.println("No Closest Node found for position: " + position);
-    }
     return closestNode;
    }
    
@@ -480,12 +400,10 @@ ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map 
      ArrayList<PVector> path = new ArrayList<>();
      Node currentNode = endNode;
      while (currentNode != null) {
-       System.out.println("Node: " + currentNode.center);  // Debug print
        path.add(currentNode.center);
        currentNode = currentNode.parent;
      }
      Collections.reverse(path);
-     System.out.println("Reconstructed path: " + path);  // Debug print
      return path;
    }
    //end helper methods for A*
@@ -514,13 +432,5 @@ ArrayList<ArrayList<Wall>> splitIntoConvexPolygons(ArrayList<Wall> outline, Map 
        fill(255, 0, 0);
        ellipse(node.center.x, node.center.y, 5, 5);
      }
-     
-     stroke(0, 0, 255);
-     for (Node node : nodes) {
-       for (Wall wall : node.connections) {
-         line(wall.start.x, wall.start.y, wall.end.x, wall.end.y);
-       }
-     }
-     
    }
 }

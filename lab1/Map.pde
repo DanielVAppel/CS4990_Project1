@@ -152,8 +152,7 @@ class Map
   
    boolean collides(PVector from, PVector to)
    {
-      for (Wall w : walls)
-      {
+      for (Wall w : walls) {
          if (w.crosses(from, to)) return true;
       }
       return false;
