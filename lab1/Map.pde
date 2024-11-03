@@ -46,7 +46,9 @@ class Wall
 
       // calculate the intersection as this proportion
       float intersection = ldist1 + t*(ldist2 - ldist1);
-      if (intersection < 0 || intersection > len) return false;
+      if (intersection <= 0 || intersection >= len) {
+        return false;
+      }
       return true;      
    }
    

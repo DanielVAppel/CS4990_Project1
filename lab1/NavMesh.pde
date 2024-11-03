@@ -42,15 +42,73 @@ class NavMesh
    void bake(Map map) {
     nodes = new ArrayList<>();
     ArrayList<Wall> walls = map.outline;
+
+    // Step 1: Generate the navigation mesh walls.
     walls = generateNavMesh(walls);
-    
+
+    // Step 2: Generate vertices from the walls.
+    ArrayList<Vertex> vertices = generateVerticesFromWalls(walls);
+
+    // Step 3: Generate polygons using vertices.
     ArrayList<HashSet<PVector>> lineSegments = new ArrayList<>();
     for (Wall wall : walls) {
+      if (map.outline.contains(wall)) continue;
         HashSet<PVector> segment = new HashSet<>(Arrays.asList(wall.start, wall.end));
         lineSegments.add(segment);
     }
     ArrayList<ArrayList<Wall>> polygons = generatePolygons(vertices, lineSegments);
-   }
+
+    // Step 4: Process nodes and connections from polygons.
+    HashMap<PVector, Node> midpointNodeMap = new HashMap<>();
+    for (HashSet<PVector> lineSegment : lineSegments) {
+      PVector[] points = lineSegment.toArray(new PVector[0]);
+      PVector midpoint = getMidpoint(points[0], points[1]);
+      if (!isPointInPolygon(midpoint, map.outline) && isOnSameLine(points[0], points[1], map.outline)) {
+        continue;
+      }
+      Node midpointNode = midpointNodeMap.get(midpoint);
+      if (midpointNode == null) {
+        midpointNode = new Node();
+        midpointNode.id = nodes.size();
+        midpointNode.center = midpoint;
+        midpointNode.neighbors = new ArrayList<>();
+        midpointNode.connections = new ArrayList<>();
+        nodes.add(midpointNode);
+        midpointNodeMap.put(midpoint, midpointNode);
+      }
+      
+      //connect neighboring nodes
+      for (HashSet<PVector> otherSegment : lineSegments) {
+        if (!otherSegment.equals(lineSegment)) {
+          PVector[] otherPoints = otherSegment.toArray(new PVector[0]);
+          PVector otherMidpoint = getMidpoint(otherPoints[0], otherPoints[1]);
+          if (!isPointInPolygon(otherMidpoint, walls) || isOnSameLine(points[0], points[1], map.outline)) {
+                    continue;
+          }
+          Node otherMidpointNode = midpointNodeMap.get(otherMidpoint);
+          if (otherMidpointNode != null && !midpointNode.neighbors.contains(otherMidpointNode)) {
+            Wall pathSegment = new Wall(midpointNode.center, otherMidpointNode.center);
+            if (!doesEdgeIntersectPolygon(pathSegment, map.outline)) {
+              midpointNode.neighbors.add(otherMidpointNode);
+              otherMidpointNode.neighbors.add(midpointNode);
+              midpointNode.connections.add(pathSegment);
+              otherMidpointNode.connections.add(pathSegment);
+            }
+          }
+        }
+      }
+    }
+
+    // Debug Information.
+    System.out.println("Total nodes: " + nodes.size());
+    int totalConnections = 0;
+    for (Node node : nodes) {
+        totalConnections += node.connections.size();
+    }
+    System.out.println("Total nodes connections: " + totalConnections);
+  }
+
+
 
 
    
@@ -99,7 +157,7 @@ class NavMesh
         ArrayList<Vertex> potentialPoints = new ArrayList<Vertex>();
         for (Vertex potentialPoint : vertices) {
           if (!potentialPoint.equals(reflexPoint) && (!reflexPoint.isConnectedTo(potentialPoint) || !potentialPoint.isConnectedTo(reflexPoint)) && 
-            (!collides(reflexPoint.vector, potentialPoint.vector, navmesh) && 
+            (!collides(reflexPoint.vector, potentialPoint.vector, navmesh) &&
               map.isReachable(new Wall(reflexPoint.vector, potentialPoint.vector).center())) && 
               map.isReachable(new
               Wall(PVector.sub(reflexPoint.vector, new PVector(.001, .001)), 
@@ -108,8 +166,7 @@ class NavMesh
           }
         }
         if (potentialPoints.size() == 0) {
-          println("ERROR: No luck, cannot find a suitable split");
-          System.exit(-1);
+          break;
         }
         // Find the shortest of the new edges we can create
         List<Wall> potentialEdges = potentialPoints.stream().map(pp -> new
@@ -117,11 +174,11 @@ class NavMesh
         potentialEdges.sort((w1, w2) ->
         Float.valueOf(w1.len).compareTo(Float.valueOf(w2.len)));
         // Sort potentialPoints by how much each point breaks up the reflex angle the more evenly it breaks it the better
-        potentialPoints.sort((p1, p2) ->
-          reflexPoint.testNeighbor(p1).stream().reduce((a1, a2) -> Math.abs(a1 -
-          a2)).get().compareTo(
-          reflexPoint.testNeighbor(p2).stream().reduce((a1, a2) -> Math.abs(a1 -
-          a2)).get()));
+        potentialPoints.sort((p1, p2) -> {
+                double angleDiff1 = Math.abs(PVector.angleBetween(reflexPoint.vector, p1.vector));
+                double angleDiff2 = Math.abs(PVector.angleBetween(reflexPoint.vector, p2.vector));
+                return Double.compare(angleDiff1, angleDiff2);
+            });
         Wall bestWall = new Wall(reflexPoint.vector, potentialPoints.get(0).vector); // Best wall by breaking angle
         bestWall = potentialEdges.get(0); // best wall by shortest distance
         Vertex bestVertex = vertices.get(vertices.lastIndexOf(new
@@ -164,7 +221,6 @@ class NavMesh
           .collect(Collectors.toList());
 
         if (validNeighbors.isEmpty()) {
-          System.out.println("ERROR: No valid neighbors found for start vertex");
           break; // or handle the error appropriately
         }
         Vertex current = validNeighbors.get(0);
@@ -265,11 +321,8 @@ class NavMesh
     return result;
   }
     
-    PVector getMidpoint(Wall wall) {
-      float midpointX = (wall.start.x + wall.end.x) / 2;
-      float midpointY = (wall.start.y + wall.end.y) / 2;
-      PVector midpoint = new PVector(midpointX, midpointY);
-      return midpoint;
+    PVector getMidpoint(PVector p1, PVector p2) {
+      return new PVector((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
     }
     
     boolean isOnSameLine(PVector p1, PVector p2, ArrayList<Wall> polygon) {
@@ -415,7 +468,26 @@ class NavMesh
    }
    
    void draw() {
-     drawNavMesh();
+     ArrayList<Wall> walls = map.outline;
+
+    // Step 1: Generate the navigation mesh walls.
+    walls = generateNavMesh(walls);
+
+    // Step 2: Generate vertices from the walls.
+    ArrayList<Vertex> vertices = generateVerticesFromWalls(walls);
+
+    // Step 3: Generate polygons using vertices.
+    ArrayList<HashSet<PVector>> lineSegments = new ArrayList<>();
+    for (Wall wall : walls) {
+        HashSet<PVector> segment = new HashSet<>(Arrays.asList(wall.start, wall.end));
+        lineSegments.add(segment);
+    }
+    ArrayList<ArrayList<Wall>> polygons = generatePolygons(vertices, lineSegments);
+    
+    for (Node node : nodes) {
+       fill(0, 255, 0);
+       ellipse(node.center.x, node.center.y, 5, 5);
+     }
    }
    
    void drawNavMesh() {
@@ -423,9 +495,9 @@ class NavMesh
      
      //draw each polygon
      for (Node node : nodes) {
-       ArrayList<Wall> polygon = node.polygon;
+       ArrayList<Wall> walls = node.polygon;
        
-       for (Wall wall : polygon) {
+       for (Wall wall : walls) {
          line(wall.start.x, wall.start.y, wall.end.x, wall.end.y);
        }
        
