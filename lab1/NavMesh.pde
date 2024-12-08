@@ -8,8 +8,6 @@ import java.util.*;
 
 /// In this file you will implement your navmesh and pathfinding. 
 /// This node representation is just a suggestion
-
-/// This node representation is just a suggestion
 class Node
 {
    int id;    //each polygon is given a unique ID    
@@ -61,7 +59,7 @@ class Node
 class NavMesh
 {   
    public ArrayList<PVector> ReflexPoints;  //Reflex points that need to be adjusted
-   public ArrayList<Wall> NewWalls;      //Walls that have been added to split polygon to be convex useful as a counter, and as a stepping stone, but could be edited out
+   public ArrayList<Wall> NewWalls;      //Walls that have been added to split polygon to be convex useful as a counter
    public ArrayList<Node> convexPolygons;    //The list of all convex polygons
    //public ArrayList<PVector> holyGrail;  //path to be followed
    HashMap<Integer, Node> NewWallsMap = new HashMap<Integer, Node>();   //Useful for providing neighbors into each node using the index number
@@ -78,7 +76,7 @@ class NavMesh
          
          //each wall should have a list of connections, and a varying number of walls. the map should contain a listing for each of these corresponding walls
        for(int i = 0; i < convexPolygons.size(); i++){
-         if(convexPolygons.get(i).connections.size() != convexPolygons.get(i).neighbors.size()){  //if they have the same number then every connecting wall should have its 
+         if(convexPolygons.get(i).connections.size() != convexPolygons.get(i).neighbors.size()){ 
              
            for(int j = 0; j < convexPolygons.get(i).connections.size(); j++){  
                
@@ -89,31 +87,19 @@ class NavMesh
              }                     
            }
          }   
- 
-       print("\n The Walls map is: " + NewWallsMap);
                
        //if(convexPolygons != null){
       for(int l = 0; l < convexPolygons.size(); l++){
-        print("\nPrinting information for the node with ID: " + convexPolygons.get(l).id);
-        print("\n\t The connecting walls: ");
-        for(int f = 0; f < convexPolygons.get(l).connections.size(); f++){
-          print("\n\t\t wall is: " + convexPolygons.get(l).connections.get(f) + " with an ID of " + convexPolygons.get(l).connections.get(f).ID);
-            
-        }
-        print("\n\t The surrounding walls: ");
         for(int f = 0; f < convexPolygons.get(l).polygon.size(); f++){
           stroke(020);            
         }
         
-        print("\n\t The neighbor nodes: ");
         for(int f = 0; f < convexPolygons.get(l).neighbors.size(); f++){
-          print(convexPolygons.get(l).neighbors.size());
-          print("\n\t\t neighbor is: " + convexPolygons.get(l).neighbors.get(f).id + ", at point " + convexPolygons.get(l).neighbors.get(f).center);
           stroke(150);          
         }
       }   
    }
-   
+
    void Split(ArrayList<Wall> PolygonWalls)
    {
      //find first reflexive point to split off from
@@ -124,16 +110,12 @@ class NavMesh
            int next = (i+1)%PolygonWalls.size();
            if(PolygonWalls.get(i).normal.dot(PolygonWalls.get(next).direction) >= 0)
            {
-             print("\nReflex found");
              ReflexPointNumber = next;
              Convex = false;
              break;
            }
-         }
-     print("\nReflex Point Number: " + ReflexPointNumber);    
-          
+         }          
      if(Convex){
-       print("\nFound Convex Polygon");
        //Create new polygon, no reflex points found
        //creates them with IDs of the order they were created in
        Node convex = new Node(convexPolygons.size(), PolygonWalls);
@@ -147,7 +129,6 @@ class NavMesh
            if(NewWallsMap.containsKey(PolygonWalls.get(e).getID())){
              //if it does it can add the neighboring node
              convex.addNeighbor(NewWallsMap.get(PolygonWalls.get(e).getID()));
-             //convex.addNeighbor(NewWallsMap.get(PolygonWalls.get(e).getID()), PolygonWalls.get(e));
              convex.addNeighborWall(NewWallsMap.get(PolygonWalls.get(e).getID()), PolygonWalls.get(e));
              
              NewWallsMap.put(-1 * PolygonWalls.get(e).getID(), convex);
@@ -162,8 +143,7 @@ class NavMesh
      }  else { //Going to need to split it again
      
        PVector ReflexPoint = PolygonWalls.get(ReflexPointNumber).start;       
-       //Need to find a point to fix at
-       int FixPointNumber = 0;    //just need to initialize these variables, a valid fix point should always be found in our loop
+       int FixPointNumber = 0;    //initialize these variables, a valid fix point should always be found in the loop
        PVector FixPoint = ReflexPoint;
      
        int PointGap = 2;      //Points between start and fix, starts by skipping the point we know is reflex already
@@ -191,8 +171,6 @@ class NavMesh
          
          PointGap += 1;  //if the first point doesnt work, then it will go to the next point
        }
-
-       print("\nSplitting the polygon between points " + ReflexPoint + ", " + FixPoint);
        
        //makes sure that in the order list of walls, the reflex point comes before so both new polygons are properly directioned and ordered
        if(FixPointNumber < ReflexPointNumber){
@@ -220,18 +198,11 @@ class NavMesh
        for(int r = 0; r<PolygonWalls.size(); r++){
            if(r >= ReflexPointNumber && r < FixPointNumber){
              BackWalls.add(PolygonWalls.get(r));
-             //print("\nAdding to backwall wall: " + r);
            } else{
              FrontWalls.add(PolygonWalls.get(r));
-             //print("\nAdding to frontwall wall: " + r);
            }
        }
        FrontWalls.add(ReflexPointNumber, Normal);      
-       
-       //Splits both new polygons
-       print("\nPrinting the front wall list");
-       PrintWallCoords(FrontWalls);
-       //print("\nSplitting the front Wall");
        Split(FrontWalls);
        Split(BackWalls);
      }
@@ -289,10 +260,7 @@ class NavMesh
      //call find node path
      if (startNode != endNode){
        ArrayList<Node> nodePath = new ArrayList<Node>();
-       print("\nFinding path between nodes");
        nodePath = findNodePath(startNode, endNode);
-       
-       print("\n Number of nodes " + nodePath.size());
        
        for(int i = 0; i < nodePath.size() - 1; i++){
          //path.add(nodePath.get(i).center);
@@ -300,7 +268,6 @@ class NavMesh
        }
      }
      path.add(destinationPosition);   
-     print("\n Number of points to travel through: " + path.size()); 
      return path;  
    }
    
@@ -320,16 +287,12 @@ class NavMesh
    
    ArrayList<Node> findNodePath(Node start, Node destination)
    {
-     print("\n Looking for path");
      ArrayList<frontierNode> frontierList = new ArrayList<frontierNode>();
      ArrayList<Node> previouslyExpandedList = new ArrayList<Node>();
      
      frontierList.add(new frontierNode(start, null, 0, destination.center));
-     //frontierNode lastNode;
      while(frontierList.get(0).currentNode != destination){
-        print("\n The current lowest node is at: " + frontierList.get(0).currentNode.center);
         for(int i = 0; i < frontierList.get(0).currentNode.neighbors.size(); i++){
-          print("\n Adding Neighbors");
           float newPath = frontierList.get(0).pathLength + getPVectorDistance(frontierList.get(0).currentNode.center, frontierList.get(0).currentNode.neighbors.get(i).center);
           frontierList.add(new frontierNode(frontierList.get(0).currentNode.neighbors.get(i), frontierList.get(0), newPath, destination.center));
         }
@@ -339,7 +302,6 @@ class NavMesh
         while(previouslyExpandedList.contains(frontierList.get(0).currentNode)){
           frontierList.remove(0);
         }
-        print("\n Done Sorting");
      }
      
       ArrayList<Node> result = new ArrayList<Node>();
@@ -356,7 +318,6 @@ class NavMesh
    
    class FrontierCompare implements Comparator<frontierNode>{
      int compare(frontierNode a, frontierNode b){
-       print("\n Doing comparing");
        if(a.aValue > b.aValue){
          return 1;
        } else if(a.aValue < b.aValue){
