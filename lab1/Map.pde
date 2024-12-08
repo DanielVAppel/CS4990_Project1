@@ -6,6 +6,7 @@ class Wall
    PVector normal;
    PVector direction;
    float len;
+   int ID; // Unique identifier for this wall
    
    Wall(PVector start, PVector end)
    {
@@ -15,9 +16,19 @@ class Wall
       len = direction.mag();
       direction.normalize();
       normal = new PVector(-direction.y, direction.x);
+      this.ID = 0; // Default ID
    }
    
-   
+   // Returns the unique ID of this wall
+    int getID() {
+        return this.ID;
+    }
+
+    // Sets the unique ID for this wall
+    void setID(int id) {
+        this.ID = id;
+    }
+    
    boolean crosses(PVector from, PVector to)
    {
       // Vector pointing from `this.start` to `from`
